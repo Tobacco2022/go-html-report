@@ -1,4 +1,4 @@
-module github.com/go-html-report
+module github.com/tobacco2022/go-html-report
 
 go 1.16
 
