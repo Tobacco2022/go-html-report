@@ -3,7 +3,7 @@
 ## Install
 
 ```bash
-go install .
+go install github.com/Tobacco2022/go-html-report@latest
 ```
 
 
