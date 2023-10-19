@@ -13,8 +13,8 @@ go install github.com/Tobacco2022/go-html-report@latest
 
 
 # usage: convert go test output to html report
- go test -v ./... |report .
- go test -v ./... |report index.hmtl
+ go test -v ./... |go-html-report .
+ go test -v ./... |go-html-report index.hmtl
 ```
 
 ## Refer 
