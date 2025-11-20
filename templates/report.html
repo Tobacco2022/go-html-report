@@ -3,389 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="refresh" content="99999999">
-    <title>Test Report</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Report - {{ .Title }}</title>
     <style type="text/css">
         {{style.css}}
     </style>
 </head>
 <body>
-<h1 class="stickyh1">
-    Test Report: {{ .Title }}
-</h1>
-<div class="testsummary">
-    <div class="testclasses">
-        <h3>Summary</h3>
+    <div class="container">
+        <header>
+            <h1>Test Report</h1>
+            <p class="subtitle">{{ .Title }}</p>
+        </header>
 
-        <div id="container" class="ak-left ak-bchart"></div>
-
-        <div class="ak-clear"></div>
-    </div>
-</div>
-
-<div class="testbuttons">
-
-
-    <button id="showpass" type="button" class="btn btn-info">Pass</button>
-    <button id="showfail" type="button" class="btn btn-info">Fail</button>
-    <button id="showskip" type="button" class="btn btn-info">Skip</button>
-    <button id="showall" type="button" class="btn btn-info">Expand All</button>
-    <button id="hideall" type="button" class="btn btn-info">Collapse All</button>
-
-</div>
-{{range .Report.Suites }}
-<div class="testsuite">
-    <div class="testclasses">
-        <h3>Detail</h3>
-        <div class="testclass">
-            <div class="testcases">
-                {{ range .TestCases }}
-                <div class="test outcome outcome-{{ .Outcome | lower }}">
-                    <div class="testcase">
-                        <table class="proplist">
-                            <tr><th>Test case:</th><td><b>{{.Name }}</b></td></tr>
-                            <tr><th>Status:</th><td>{{.Outcome | lower}}</td></tr>
-                            <tr><th>Duration:</th><td>{{.Time }} sec</td></tr>
-                        </table>
-                        {{if .Failure }}
-                        <div class="casedetail">
-                            <button class="btnDeatil btn btn-info">Detail</button>
-                        </div>
-                        {{end}}
-
-                        {{if .SkipMessage }}
-                        <div class="casedetail">
-                            <button class="btnDeatil btn btn-info">Detail</button>
-                        </div>
-                        {{end}}
-                    </div>
-                    {{if .Failure }}
-                    <pre>{{.Failure.Contents}}</pre>
-                    {{end}}
-
-                    {{if .SkipMessage }}
-                    <pre>{{.SkipMessage.Message}}</pre>
-                    {{end}}
-
-                </div>
-                {{end}}
+        <div class="summary">
+            <div class="stat-card success">
+                <div class="stat-number" id="passCount">0</div>
+                <div class="stat-label">Passed</div>
+            </div>
+            <div class="stat-card failed">
+                <div class="stat-number" id="failCount">0</div>
+                <div class="stat-label">Failed</div>
+            </div>
+            <div class="stat-card skipped">
+                <div class="stat-number" id="skipCount">0</div>
+                <div class="stat-label">Skipped</div>
+            </div>
+            <div class="stat-card total">
+                <div class="stat-number" id="totalCount">0</div>
+                <div class="stat-label">Total</div>
             </div>
         </div>
+
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="success">Passed</button>
+            <button class="filter-btn" data-filter="failed">Failed</button>
+            <button class="filter-btn" data-filter="skipped">Skipped</button>
+        </div>
+
+        {{range .Report.Suites }}
+        <div class="test-suite">
+            <h2 class="suite-name">{{ .Name }}</h2>
+            {{ range .TestCases }}
+            <div class="test-item outcome-{{ .Outcome | lower }}" data-outcome="{{ .Outcome | lower }}">
+                <div class="test-header">
+                    <div class="test-info">
+                        <span class="test-status status-{{ .Outcome | lower }}">{{ .Outcome }}</span>
+                        <span class="test-name">{{ .Name }}</span>
+                        <span class="test-duration">{{ .Time }}s</span>
+                    </div>
+                    {{if or .Failure .SkipMessage }}
+                    <button class="toggle-detail">▼</button>
+                    {{end}}
+                </div>
+                {{if .Failure }}
+                <pre class="test-output">{{ .Failure.Contents }}</pre>
+                {{end}}
+                {{if .SkipMessage }}
+                <pre class="test-output">{{ .SkipMessage.Message }}</pre>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+        {{ end }}
     </div>
 
-</div>
-{{ end }}
 
+    <script>
+        // 统计数据
+        document.addEventListener('DOMContentLoaded', function() {
+            const items = document.querySelectorAll('.test-item');
+            let total = items.length;
+            let passed = document.querySelectorAll('.outcome-success').length;
+            let failed = document.querySelectorAll('.outcome-failed').length;
+            let skipped = document.querySelectorAll('.outcome-skipped').length;
 
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('passCount').textContent = passed;
+            document.getElementById('failCount').textContent = failed;
+            document.getElementById('skipCount').textContent = skipped;
 
-<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.1/jquery.min.js"></script>
-<link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
-<script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.2.3/js/bootstrap.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/highcharts/11.0.1/highcharts.js"></script>
+            // 筛选功能
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    filterBtns.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    const filter = this.dataset.filter;
+                    items.forEach(item => {
+                        if (filter === 'all') {
+                            item.style.display = 'block';
+                        } else {
+                            item.style.display = item.dataset.outcome === filter ? 'block' : 'none';
+                        }
+                    });
+                });
+            });
 
-
-<script>
-    $(function () {
-        var totalCount = $(".outcome").length
-        var passCount = $(".outcome-success").length
-        var failCount = $(".outcome-failed").length
-        var skipCount = $(".outcome-skipped").length
-        // Radialize the colors
-        Highcharts.getOptions().colors = Highcharts.map(Highcharts.getOptions().colors, function (color) {
-            return {
-                radialGradient: { cx: 0.5, cy: 0.3, r: 0.7 },
-                stops: [
-                    [0, color],
-                    [1, Highcharts.Color(color).brighten(-0.3).get('rgb')] // darken
-                ]
-            };
-        });
-        // Build the chart
-        $('#container').highcharts({
-            legend: {
-                layout: 'vertical',
-                backgroundColor: '',
-                align: 'right',
-                verticalAlign: 'top',
-                floating: true,
-                labelFormatter: function () {
-                    return this.name +'  ('+this.num+')';
-                }
-            },
-            chart: {
-                plotBackgroundColor: null,
-                plotBorderWidth: null,
-                plotShadow: false
-            },
-            title: {
-                text: ''
-            },
-            tooltip: {
-                pointFormat: '{series.name}: <b>{point.percentage:.1f}%</b>'
-            },
-            plotOptions: {
-                pie: {
-                    allowPointSelect: true,
-                    cursor: 'pointer',
-                    dataLabels: {
-                        enabled: true,
-                        format: '<b>{point.name}</b>: {point.percentage:.1f} %',
-                        style: {
-                            color: (Highcharts.theme && Highcharts.theme.contrastTextColor) || 'black'
-                        },
-                        connectorColor: 'silver'
-                    },
-                    showInLegend: true
-                }
-            },
-            series: [{
-                type: 'pie',
-                name: 'Q',
-                data: [
-                    {
-                        name: 'SUCCESS',
-                        y: passCount/totalCount*100,
-                        num: passCount,
-                        color: '#5cb85c',
-                    },
-                    {
-                        name: 'FAILED',
-                        y: failCount/totalCount*100,
-                        num: failCount,
-                        color: '#d9534f',
-                        sliced: true,
-                        selected: true,
-
-                    },
-                    {
-                        name: 'SKIPPED',
-                        y: skipCount/totalCount*100,
-                        num: skipCount,
-                        color: '#a0a0a0',
-                    },
-                ]
-            }]
-        });
-    });
-</script>
-<script>
-    $(function() {
-        $(".btnDeatil").click(function () {
-            if ($(this).closest(".testcase").next("pre").css("display") === 'block') {
-                $(this).closest(".testcase").next("pre").css("display", "none");
-            } else {
-                $(this).closest(".testcase").next("pre").css("display", "block");
-            }
-        });
-    })
-
-</script>
-
-
-<script>
-    $(function() {
-
-
-        $(".proplist").click(function () {
-            var tcname = $(this).find("b").html();
-
-            var thistest = this
-
-            if ($(thistest).attr("isCollapse") === '1') {
-                var showstr=$(this).closest(".testclass").attr("show")
-
-                if (showstr){
-                    var tests = $(".outcome"+"-"+showstr)
-                }else{
-                    var tests = $(".outcome")
-                }
-                tests.each(function(){
-                    let tc= $(this).find('b').html();
-                    if (tc.startsWith(tcname+"/")){
-
-                        $(this).css("display","block");
-
-
+            // 展开/收起详情
+            document.querySelectorAll('.toggle-detail').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const output = this.closest('.test-item').querySelector('.test-output');
+                    if (output) {
+                        const isVisible = output.style.display === 'block';
+                        output.style.display = isVisible ? 'none' : 'block';
+                        this.textContent = isVisible ? '▼' : '▲';
                     }
                 });
-                $(thistest).attr("isCollapse","0")
-            }else{
-                $(".test").each(function(){
-                    let tc= $(this).find('b').html();
-                    if (tc.startsWith(tcname+"/")){
-
-                        $(this).css("display","none");
-
-
-                    }
-                })
-                $(thistest).attr("isCollapse","1")
-            }
-
-        });
-    })
-
-</script>
-
-<script>
-    $(function() {
-        function toTree(tcs){
-
-            var tcArr = tcs.map(function(e){
-
-                var parts = e.split("/")
-                if (parts.length==1){
-                    parentKey="";
-                }else{
-                    parts.pop();
-                    parentKey=parts.join("/");
-
-                }
-                return {
-                    "children":[],
-                    "parentKey":parentKey,
-                    "key":e
-
-                } })
-
-
-
-            var tcMap ={};
-            tcArr.forEach(function(e){
-
-
-                tcMap[e.key]=e
             });
 
-            var tcArrNew=[]
-
-            tcArr.forEach(item => {
-                const parent = tcMap[item.parentKey]
-                if (parent) {
-                    parent.children.push(item)
-                } else {
-                    tcArrNew.push(item)
-                }
-            })
-
-            return tcArrNew
-        }
-        function extractTree(arrs,children){
-            let attrList = [];
-            if(!Array.isArray(arrs)&&!arrs.length)return [];
-            if(typeof children !== 'string')return [];
-            attrList = Object.keys(arrs[0]);
-            attrList.splice(attrList.indexOf(children), 1);
-            let list = [];
-            const getObj = (arr)=>{
-                arr.forEach(function(row){
-                    let obj = {};
-                    attrList.forEach(item=>{
-                        obj[item] = row[item];
-                    });
-                    list.push(obj);
-                    if(row[children]){
-                        getObj(row[children]);
-                    }
-                })
-                return list;
-            }
-            return getObj(arrs);
-        };
-        var tcs=[];
-        $(".test").each(function(){tcs.push($(this).find("b").html())});
-        var tctree= toTree(tcs);
-        var newArr = extractTree(tctree,"children");
-        var Imap = {};
-        newArr.forEach(function(e,i){Imap[e.key]=i});
-        $(".testcases").each(function(){
-            var that =this;
-            var arr = $(that).find(".test");
-            $(arr).each(function(){
-                var tcname = $(this).find("b").html();
-                $(this).attr("data-id",Imap[tcname]);
-            })
-            arr.sort(function(a,b){return a.getAttribute('data-id') - b.getAttribute('data-id')});  //排序
-            for(var i=0;i<arr.length;i++) {
-                that.appendChild(arr[i]);
-            }
-
-        });
-        $(".test").each(function(){var tc =$(this).find("b").html();var ml = (tc.split("/").length-1)*6; $(this).css("margin-left",ml+"em")});
-        $("pre").css("display", "none");
-
-    });
-</script>
-
-<script>
-    $(function() {
-        $(".testclass").each(function(){
-            $(this).prev("h3").html("Detail (Total:"+$(this).find(".test").length+")");
-        });
-        $("#showpass").click(function () {
-            $(".outcome").each(function(){
-                $(this).css("display", "none");
-                $(this).find(".proplist").attr("isCollapse","1");
+            // 默认隐藏所有输出
+            document.querySelectorAll('.test-output').forEach(output => {
+                output.style.display = 'none';
             });
-            $(".outcome-success").each(function(){
-                $(this).css("display", "block");
-                $(this).find(".proplist").attr("isCollapse","0");
-            });
-            $(".testclass").each(function(){
-                $(this).attr("show","success")
-            })
-
         });
-        $("#showfail").click(function () {
-            $(".outcome").each(function(){
-                $(this).css("display", "none");
-                $(this).find(".proplist").attr("isCollapse","1");
-            });
-            $(".outcome-failed").each(function(){
-                $(this).css("display", "block");
-                $(this).find(".proplist").attr("isCollapse","0");
-            });
-            $(".testclass").each(function(){
-                $(this).attr("show","failed")
-            })
-        });
-        $("#showskip").click(function () {
-            $(".outcome").each(function(){
-                $(this).css("display", "none");
-                $(this).find(".proplist").attr("isCollapse","1")
-            });
-            $(".outcome-skipped").each(function(){
-                $(this).css("display", "block");
-                $(this).find(".proplist").attr("isCollapse","1")
-            });
-            $(".testclass").each(function(){
-                $(this).attr("show","skipped")
-            })
-        });
-        $("#hideall").click(function () {
-            $(".outcome").each(function(){
-
-                var tcname = $(this).find("b").html();
-                if (tcname.split("/").length>1){
-                    $(this).css("display", "none");
-                }else{
-                    $(this).css("display", "block");
-                }
-
-            })
-
-        });
-
-        $("#showall").click(function () {
-            $(".outcome").each(function(){
-                $(this).css("display", "block");
-                $(this).find(".proplist").attr("isCollapse","0");
-            })
-            $(".testclass").each(function(){
-                $(this).removeAttr("show")
-            })
-        });
-    })
-
-</script>
+    </script>
 </body>
 </html>
