@@ -175,15 +175,6 @@ func JUnitReportXMLModel(report *Report, goVersion, title string) (*Junit, error
 					Type:     "",
 					Contents: strings.Join(test.Output, "\n"),
 				}
-			} else if test.Result == PASS {
-				// Store PASS output in Failure field with a special marker
-				if len(test.Output) > 0 {
-					testCase.Failure = &JUnitFailure{
-						Message:  "Passed",
-						Type:     "PASS",
-						Contents: strings.Join(test.Output, "\n"),
-					}
-				}
 			}
 
 			if test.Result == SKIP {
