@@ -231,7 +231,30 @@
                 });
             });
 
-            // 筛选功能
+            // 辅助函数：获取所有子测试
+            function getChildTests(testName, allItems) {
+                const children = [];
+                allItems.forEach(item => {
+                    const tc = item.getAttribute('data-testname');
+                    if (tc && tc.startsWith(testName + "/")) {
+                        children.push(item);
+                    }
+                });
+                return children;
+            }
+
+            // 辅助函数：获取直接父测试
+            function getParentTest(testName, allItems) {
+                const parts = testName.split("/");
+                if (parts.length <= 1) return null;
+                
+                const parentName = parts.slice(0, -1).join("/");
+                return Array.from(allItems).find(item => 
+                    item.getAttribute('data-testname') === parentName
+                );
+            }
+
+            // 筛选功能 - 根据第二层测试状态筛选
             const filterBtns = document.querySelectorAll('.filter-btn[data-filter]');
             filterBtns.forEach(btn => {
                 btn.addEventListener('click', function() {
@@ -253,13 +276,49 @@
                         }
                     });
                     
-                    items.forEach(item => {
-                        if (filter === 'all') {
+                    if (filter === 'all') {
+                        // 显示所有测试
+                        items.forEach(item => {
                             item.style.display = 'block';
-                        } else {
-                            item.style.display = item.dataset.outcome === filter ? 'block' : 'none';
-                        }
-                    });
+                        });
+                    } else {
+                        // 先隐藏所有测试
+                        items.forEach(item => {
+                            item.style.display = 'none';
+                        });
+                        
+                        const itemsToShow = new Set();
+                        
+                        // 只遍历第二层测试（level === 1）
+                        items.forEach(item => {
+                            const level = parseInt(item.getAttribute('data-level'));
+                            
+                            if (level === 1 && item.dataset.outcome === filter) {
+                                // 第二层测试状态匹配
+                                const testName = item.getAttribute('data-testname');
+                                
+                                // 添加该测试本身
+                                itemsToShow.add(item);
+                                
+                                // 添加第一层父测试（Suite）
+                                const parentTest = getParentTest(testName, items);
+                                if (parentTest) {
+                                    itemsToShow.add(parentTest);
+                                }
+                                
+                                // 添加该测试的所有子测试（无论子测试是什么状态）
+                                const children = getChildTests(testName, items);
+                                children.forEach(child => {
+                                    itemsToShow.add(child);
+                                });
+                            }
+                        });
+                        
+                        // 显示收集到的测试项
+                        itemsToShow.forEach(item => {
+                            item.style.display = 'block';
+                        });
+                    }
                 });
             });
 
