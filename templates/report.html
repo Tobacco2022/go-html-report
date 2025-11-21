@@ -40,6 +40,8 @@
             <button class="filter-btn" data-filter="success">Passed</button>
             <button class="filter-btn" data-filter="failed">Failed</button>
             <button class="filter-btn" data-filter="skipped">Skipped</button>
+            <button class="filter-btn" id="expandAll">Expand All</button>
+            <button class="filter-btn" id="collapseAll">Collapse All</button>
         </div>
 
         {{range .Report.Suites }}
@@ -71,6 +73,65 @@
 
 
     <script>
+        // 树形结构处理函数
+        function toTree(tcs) {
+            var tcArr = tcs.map(function(e) {
+                var parts = e.split("/");
+                var parentKey = "";
+                if (parts.length > 1) {
+                    parts.pop();
+                    parentKey = parts.join("/");
+                }
+                return {
+                    "children": [],
+                    "parentKey": parentKey,
+                    "key": e
+                };
+            });
+
+            var tcMap = {};
+            tcArr.forEach(function(e) {
+                tcMap[e.key] = e;
+            });
+
+            var tcArrNew = [];
+            tcArr.forEach(item => {
+                const parent = tcMap[item.parentKey];
+                if (parent) {
+                    parent.children.push(item);
+                } else {
+                    tcArrNew.push(item);
+                }
+            });
+
+            return tcArrNew;
+        }
+
+        function extractTree(arrs, children) {
+            let attrList = [];
+            if (!Array.isArray(arrs) || !arrs.length) return [];
+            if (typeof children !== 'string') return [];
+            
+            attrList = Object.keys(arrs[0]);
+            attrList.splice(attrList.indexOf(children), 1);
+            let list = [];
+            
+            const getObj = (arr) => {
+                arr.forEach(function(row) {
+                    let obj = {};
+                    attrList.forEach(item => {
+                        obj[item] = row[item];
+                    });
+                    list.push(obj);
+                    if (row[children]) {
+                        getObj(row[children]);
+                    }
+                });
+                return list;
+            };
+            return getObj(arrs);
+        }
+
         // 统计数据
         document.addEventListener('DOMContentLoaded', function() {
             const items = document.querySelectorAll('.test-item');
@@ -84,14 +145,114 @@
             document.getElementById('failCount').textContent = failed;
             document.getElementById('skipCount').textContent = skipped;
 
+            // 树形排序和层级缩进
+            var tcs = [];
+            items.forEach(function(item) {
+                var testName = item.querySelector('.test-name').textContent;
+                tcs.push(testName);
+            });
+
+            var tctree = toTree(tcs);
+            var newArr = extractTree(tctree, "children");
+            var Imap = {};
+            newArr.forEach(function(e, i) {
+                Imap[e.key] = i;
+            });
+
+            // 按树形顺序重排测试项
+            document.querySelectorAll('.test-suite').forEach(function(suite) {
+                var container = suite;
+                var arr = Array.from(suite.querySelectorAll('.test-item'));
+                
+                arr.forEach(function(item) {
+                    var tcname = item.querySelector('.test-name').textContent;
+                    item.setAttribute('data-id', Imap[tcname]);
+                    item.setAttribute('data-testname', tcname);
+                });
+                
+                arr.sort(function(a, b) {
+                    return a.getAttribute('data-id') - b.getAttribute('data-id');
+                });
+                
+                arr.forEach(function(item) {
+                    container.appendChild(item);
+                });
+            });
+
+            // 设置层级缩进
+            items.forEach(function(item) {
+                var tc = item.querySelector('.test-name').textContent;
+                var level = (tc.split("/").length - 1);
+                var ml = level * 2; // 2em per level
+                item.style.marginLeft = ml + "em";
+                item.setAttribute('data-level', level);
+            });
+
+            // 点击父测试折叠/展开子测试
+            items.forEach(function(item) {
+                var header = item.querySelector('.test-header');
+                header.style.cursor = 'pointer';
+                header.setAttribute('data-collapsed', '0');
+                
+                header.addEventListener('click', function(e) {
+                    // 如果点击的是 toggle-detail 按钮，不触发折叠逻辑
+                    if (e.target.classList.contains('toggle-detail')) {
+                        return;
+                    }
+                    
+                    var tcname = item.getAttribute('data-testname');
+                    var isCollapsed = this.getAttribute('data-collapsed');
+                    var showFilter = item.closest('.test-suite').getAttribute('data-show-filter');
+                    
+                    if (isCollapsed === '1') {
+                        // 展开子测试
+                        var allItems = showFilter ? 
+                            document.querySelectorAll('.test-item.outcome-' + showFilter) :
+                            document.querySelectorAll('.test-item');
+                        
+                        allItems.forEach(function(testItem) {
+                            var tc = testItem.getAttribute('data-testname');
+                            if (tc && tc.startsWith(tcname + "/")) {
+                                testItem.style.display = 'block';
+                            }
+                        });
+                        this.setAttribute('data-collapsed', '0');
+                    } else {
+                        // 折叠子测试
+                        document.querySelectorAll('.test-item').forEach(function(testItem) {
+                            var tc = testItem.getAttribute('data-testname');
+                            if (tc && tc.startsWith(tcname + "/")) {
+                                testItem.style.display = 'none';
+                                testItem.querySelector('.test-header').setAttribute('data-collapsed', '1');
+                            }
+                        });
+                        this.setAttribute('data-collapsed', '1');
+                    }
+                });
+            });
+
             // 筛选功能
-            const filterBtns = document.querySelectorAll('.filter-btn');
+            const filterBtns = document.querySelectorAll('.filter-btn[data-filter]');
             filterBtns.forEach(btn => {
                 btn.addEventListener('click', function() {
                     filterBtns.forEach(b => b.classList.remove('active'));
                     this.classList.add('active');
                     
                     const filter = this.dataset.filter;
+                    
+                    // 重置折叠状态
+                    items.forEach(item => {
+                        item.querySelector('.test-header').setAttribute('data-collapsed', '0');
+                    });
+                    
+                    document.querySelectorAll('.test-suite').forEach(suite => {
+                        if (filter === 'all') {
+                            suite.removeAttribute('data-show-filter');
+                        } else {
+                            suite.setAttribute('data-show-filter', filter);
+                        }
+                    });
+                    
                     items.forEach(item => {
                         if (filter === 'all') {
                             item.style.display = 'block';
@@ -102,7 +263,39 @@
                 });
             });
 
-            // 展开/收起详情
+            // Expand All 按钮
+            document.getElementById('expandAll').addEventListener('click', function() {
+                items.forEach(function(item) {
+                    item.style.display = 'block';
+                    item.querySelector('.test-header').setAttribute('data-collapsed', '0');
+                });
+                
+                document.querySelectorAll('.test-suite').forEach(suite => {
+                    suite.removeAttribute('data-show-filter');
+                });
+                
+                // 重置筛选按钮状态
+                filterBtns.forEach(b => b.classList.remove('active'));
+            });
+
+            // Collapse All 按钮
+            document.getElementById('collapseAll').addEventListener('click', function() {
+                items.forEach(function(item) {
+                    var tcname = item.getAttribute('data-testname');
+                    var level = parseInt(item.getAttribute('data-level'));
+                    
+                    if (level === 0) {
+                        // 顶层测试显示
+                        item.style.display = 'block';
+                        item.querySelector('.test-header').setAttribute('data-collapsed', '1');
+                    } else {
+                        // 子测试隐藏
+                        item.style.display = 'none';
+                    }
+                });
+            });
+
+            // 展开/收起详情（错误输出）
             document.querySelectorAll('.toggle-detail').forEach(btn => {
                 btn.addEventListener('click', function(e) {
                     e.stopPropagation();
