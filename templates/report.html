@@ -37,11 +37,7 @@
 
         <div class="filter-buttons">
             <button class="filter-btn active" data-filter="all">All</button>
-            <button class="filter-btn" data-filter="success">Passed</button>
             <button class="filter-btn" data-filter="failed">Failed</button>
-            <button class="filter-btn" data-filter="skipped">Skipped</button>
-            <button class="filter-btn" id="expandAll">Expand All</button>
-            <button class="filter-btn" id="collapseAll">Collapse All</button>
         </div>
 
         {{range .Report.Suites }}
@@ -203,19 +199,45 @@
                     var tcname = item.getAttribute('data-testname');
                     var isCollapsed = this.getAttribute('data-collapsed');
                     var showFilter = item.closest('.test-suite').getAttribute('data-show-filter');
+                    var currentLevel = parseInt(item.getAttribute('data-level'));
                     
                     if (isCollapsed === '1') {
                         // 展开子测试
-                        var allItems = showFilter ? 
-                            document.querySelectorAll('.test-item.outcome-' + showFilter) :
-                            document.querySelectorAll('.test-item');
-                        
-                        allItems.forEach(function(testItem) {
-                            var tc = testItem.getAttribute('data-testname');
-                            if (tc && tc.startsWith(tcname + "/")) {
-                                testItem.style.display = 'block';
-                            }
-                        });
+                        if (currentLevel === 0 && showFilter) {
+                            // level=0 (Suite) 且有筛选：只展开符合条件的 level=1 及其所有子测试
+                            var allItems = document.querySelectorAll('.test-item');
+                            allItems.forEach(function(testItem) {
+                                var tc = testItem.getAttribute('data-testname');
+                                var testLevel = parseInt(testItem.getAttribute('data-level'));
+                                
+                                // 检查是否是直接子测试（level=1）
+                                if (tc && tc.startsWith(tcname + "/")) {
+                                    var parts = tc.split("/");
+                                    var isDirectChild = parts.length === tcname.split("/").length + 1;
+                                    
+                                    if (isDirectChild) {
+                                        // 直接子测试：检查状态是否匹配
+                                        if (testItem.dataset.outcome === showFilter) {
+                                            testItem.style.display = 'block';
+                                            // 展开该子测试的所有子测试
+                                            var grandChildren = getChildTests(tc, allItems);
+                                            grandChildren.forEach(function(gc) {
+                                                gc.style.display = 'block';
+                                            });
+                                        }
+                                    }
+                                }
+                            });
+                        } else {
+                            // level>=1 或无筛选：展开所有子测试
+                            var allItems = document.querySelectorAll('.test-item');
+                            allItems.forEach(function(testItem) {
+                                var tc = testItem.getAttribute('data-testname');
+                                if (tc && tc.startsWith(tcname + "/")) {
+                                    testItem.style.display = 'block';
+                                }
+                            });
+                        }
                         this.setAttribute('data-collapsed', '0');
                     } else {
                         // 折叠子测试
@@ -318,38 +340,6 @@
                         itemsToShow.forEach(item => {
                             item.style.display = 'block';
                         });
-                    }
-                });
-            });
-
-            // Expand All 按钮
-            document.getElementById('expandAll').addEventListener('click', function() {
-                items.forEach(function(item) {
-                    item.style.display = 'block';
-                    item.querySelector('.test-header').setAttribute('data-collapsed', '0');
-                });
-                
-                document.querySelectorAll('.test-suite').forEach(suite => {
-                    suite.removeAttribute('data-show-filter');
-                });
-                
-                // 重置筛选按钮状态
-                filterBtns.forEach(b => b.classList.remove('active'));
-            });
-
-            // Collapse All 按钮
-            document.getElementById('collapseAll').addEventListener('click', function() {
-                items.forEach(function(item) {
-                    var tcname = item.getAttribute('data-testname');
-                    var level = parseInt(item.getAttribute('data-level'));
-                    
-                    if (level === 0) {
-                        // 顶层测试显示
-                        item.style.display = 'block';
-                        item.querySelector('.test-header').setAttribute('data-collapsed', '1');
-                    } else {
-                        // 子测试隐藏
-                        item.style.display = 'none';
                     }
                 });
             });
