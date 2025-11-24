@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"encoding/json"
 	"io"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -60,250 +58,151 @@ type Benchmark struct {
 	Allocs int
 }
 
-var (
-	regexStatus   = regexp.MustCompile(`--- (PASS|FAIL|SKIP): (.+) \((\d+\.\d+)(?: seconds|s)\)`)
-	regexIndent   = regexp.MustCompile(`^([ \t]+)---`)
-	regexCoverage = regexp.MustCompile(`^coverage:\s+(\d+\.\d+)%\s+of\s+statements(?:\sin\s.+)?$`)
-	regexResult   = regexp.MustCompile(`^(ok|FAIL)\s+([^ ]+)\s+(?:(\d+\.\d+)s|\(cached\)|(\[\w+ failed]))(?:\s+coverage:\s+(\d+\.\d+)%\sof\sstatements(?:\sin\s.+)?)?$`)
-	// regexBenchmark captures 3-5 groups: benchmark name, number of times ran, ns/op (with or without decimal), B/op (optional), and allocs/op (optional).
-	regexBenchmark       = regexp.MustCompile(`^(Benchmark[^ -]+)(?:-\d+\s+|\s+)(\d+)\s+(\d+|\d+\.\d+)\sns/op(?:\s+(\d+)\sB/op)?(?:\s+(\d+)\sallocs/op)?`)
-	regexOutput          = regexp.MustCompile(`(    )*\t(.*)`)
-	regexSummary         = regexp.MustCompile(`^(PASS|FAIL|SKIP)$`)
-	regexPackageWithTest = regexp.MustCompile(`^# ([^\[\]]+) \[[^\]]+\]$`)
-)
+// TestEvent represents a single test event from JSON output
+type TestEvent struct {
+	Time    string  `json:"Time"`
+	Action  string  `json:"Action"`
+	Package string  `json:"Package"`
+	Test    string  `json:"Test,omitempty"`
+	Output  string  `json:"Output,omitempty"`
+	Elapsed float64 `json:"Elapsed,omitempty"`
+}
 
 var report = &Report{make([]Package, 0)}
 
-// Parse parses go test output from reader r and returns a report with the
+// Parse parses go test JSON output from reader r and returns a report with the
 // results. An optional pkgName can be given, which is used in case a package
 // result line is missing.
 func Parse(r io.Reader, pkgName string) error {
-	reader := bufio.NewReader(r)
+	scanner := bufio.NewScanner(r)
 
-	// keep track of tests we find
-	var tests []*Test
+	// Map to track tests by their full name (including package)
+	testMap := make(map[string]*Test)
 
-	// keep track of benchmarks we find
-	var benchmarks []*Benchmark
+	// Map to track packages
+	packageMap := make(map[string]*Package)
 
-	// sum of tests' time, use this if current test has no result line (when it is compiled test)
-	var testsTime time.Duration
+	// Track test order within packages
+	testOrder := make(map[string][]string) // package -> []testName
 
-	// current test
-	var cur string
+	for scanner.Scan() {
+		line := scanner.Text()
 
-	// coverage percentage report for current package
-	var coveragePct string
-
-	// stores mapping between package name and output of build failures
-	var packageCaptures = map[string][]string{}
-
-	// the name of the package which it's build failure output is being captured
-	var capturedPackage string
-
-	// capture any non-test output
-	var buffers = map[string][]string{}
-
-	// parse lines
-	for {
-		l, _, err := reader.ReadLine()
-		if err != nil && err == io.EOF {
-			break
-		} else if err != nil {
-			return err
+		var event TestEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			// Skip invalid JSON lines
+			continue
 		}
 
-		line := string(l)
-		fmt.Println(line)
-		if strings.HasPrefix(line, "=== RUN ") {
-			// new test
-			cur = strings.TrimSpace(line[8:])
-			tests = append(tests, &Test{
-				Name:   cur,
-				Result: FAIL,
-				Output: make([]string, 0),
-			})
-
-			// clear the current build package, so output lines won't be added to that build
-			//capturedPackage = ""
-		} else if matches := regexBenchmark.FindStringSubmatch(line); len(matches) == 6 {
-			bytes, _ := strconv.Atoi(matches[4])
-			allocs, _ := strconv.Atoi(matches[5])
-
-			benchmarks = append(benchmarks, &Benchmark{
-				Name:     matches[1],
-				Duration: parseNanoseconds(matches[3]),
-				Bytes:    bytes,
-				Allocs:   allocs,
-			})
-		} else if strings.HasPrefix(line, "=== PAUSE ") {
-			continue
-		} else if strings.HasPrefix(line, "=== CONT ") {
-			cur = strings.TrimSpace(line[8:])
-			continue
-		} else if matches := regexResult.FindStringSubmatch(line); len(matches) == 6 {
-			if matches[5] != "" {
-				coveragePct = matches[5]
+		// Initialize package if not exists
+		if _, exists := packageMap[event.Package]; !exists {
+			packageMap[event.Package] = &Package{
+				Name:       event.Package,
+				Tests:      make([]*Test, 0),
+				Benchmarks: make([]*Benchmark, 0),
 			}
-			if strings.HasSuffix(matches[4], "failed]") {
-				// the build of the package failed, inject a dummy test into the package
-				// which indicate about the failure and contain the failure description.
-				tests = append(tests, &Test{
-					Name:   matches[4],
-					Result: FAIL,
-					Output: packageCaptures[matches[2]],
-				})
-			} else if matches[1] == "FAIL" && !containsFailures(tests) && len(buffers[cur]) > 0 {
-				// This package didn't have any failing tests, but still it
-				// failed with some output. Create a dummy test with the
-				// output.
-				tests = append(tests, &Test{
-					Name:   "Failure",
-					Result: FAIL,
-					Output: buffers[cur],
-				})
-				buffers[cur] = buffers[cur][0:0]
+			testOrder[event.Package] = make([]string, 0)
+		}
+
+		switch event.Action {
+		case "run":
+			// Create new test when it starts running
+			if event.Test != "" {
+				testKey := event.Package + "::" + event.Test
+				if _, exists := testMap[testKey]; !exists {
+					testMap[testKey] = &Test{
+						Name:   event.Test,
+						Result: FAIL, // default to FAIL until we know the result
+						Output: make([]string, 0),
+					}
+					// Track test order
+					testOrder[event.Package] = append(testOrder[event.Package], testKey)
+				}
 			}
 
-			// all tests in this package are finished
-			report.Packages = append(report.Packages, Package{
-				Name:        matches[2],
-				Duration:    parseSeconds(matches[3]),
-				Tests:       tests,
-				Benchmarks:  benchmarks,
-				CoveragePct: coveragePct,
-
-				Time: int(parseSeconds(matches[3]) / time.Millisecond), // deprecated
-			})
-
-			buffers[cur] = buffers[cur][0:0]
-			tests = make([]*Test, 0)
-			benchmarks = make([]*Benchmark, 0)
-			coveragePct = ""
-			cur = ""
-			testsTime = 0
-		} else if matches := regexStatus.FindStringSubmatch(line); len(matches) == 4 {
-			cur = matches[2]
-			test := findTest(tests, cur)
-			if test == nil {
-				continue
+		case "output":
+			// Append output to the corresponding test
+			// Only process non-empty output
+			if event.Output != "" && event.Test != "" {
+				testKey := event.Package + "::" + event.Test
+				if test, exists := testMap[testKey]; exists {
+					// Trim trailing newline from output
+					output := strings.TrimSuffix(event.Output, "\n")
+					if output != "" {
+						test.Output = append(test.Output, output)
+					}
+				}
 			}
 
-			// test status
-			if matches[1] == "PASS" {
-				test.Result = PASS
-			} else if matches[1] == "SKIP" {
-				test.Result = SKIP
-			} else {
-				test.Result = FAIL
+		case "pass":
+			// Mark test as passed
+			if event.Test != "" {
+				testKey := event.Package + "::" + event.Test
+				if test, exists := testMap[testKey]; exists {
+					test.Result = PASS
+					test.Duration = time.Duration(event.Elapsed * float64(time.Second))
+					test.Time = int(test.Duration / time.Millisecond)
+				}
 			}
 
-			if matches := regexIndent.FindStringSubmatch(line); len(matches) == 2 {
-				test.SubtestIndent = matches[1]
+		case "fail":
+			// Mark test as failed
+			if event.Test != "" {
+				testKey := event.Package + "::" + event.Test
+				if test, exists := testMap[testKey]; exists {
+					test.Result = FAIL
+					test.Duration = time.Duration(event.Elapsed * float64(time.Second))
+					test.Time = int(test.Duration / time.Millisecond)
+				}
 			}
 
-			test.Output = buffers[cur]
-
-			test.Name = matches[2]
-			test.Duration = parseSeconds(matches[3])
-			testsTime += test.Duration
-
-			test.Time = int(test.Duration / time.Millisecond) // deprecated
-		} else if matches := regexCoverage.FindStringSubmatch(line); len(matches) == 2 {
-			coveragePct = matches[1]
-		} else if matches := regexOutput.FindStringSubmatch(line); len(matches) == 3 {
-
-			// Sub-tests start with one or more series of 4-space indents, followed by a hard tab,
-			// followed by the test output
-			// Top-level tests start with a hard tab.
-			test := findTest(tests, cur)
-			if test == nil {
-				continue
-			}
-			test.Output = append(test.Output, matches[2])
-			buffers[cur] = append(buffers[cur], line)
-		} else if strings.HasPrefix(line, "# ") {
-			// indicates a capture of build output of a package. set the current build package.
-			packageWithTestBinary := regexPackageWithTest.FindStringSubmatch(line)
-			if packageWithTestBinary != nil {
-				// Sometimes, the text after "# " shows the name of the test binary
-				// ("<package>.test") in addition to the package
-				// e.g.: "# package/name [package/name.test]"
-				capturedPackage = packageWithTestBinary[1]
-			} else {
-				capturedPackage = line[2:]
-			}
-		} else if capturedPackage != "" {
-			// current line is build failure capture for the current built package
-			packageCaptures[capturedPackage] = append(packageCaptures[capturedPackage], line)
-		} else if regexSummary.MatchString(line) {
-			// unset current test name so any additional output after the
-			// summary is captured separately.
-			cur = ""
-		} else {
-			// buffer anything else that we didn't recognize
-			buffers[cur] = append(buffers[cur], line)
-
-			// if we have a current test, also append to its output
-			test := findTest(tests, cur)
-			if test != nil {
-				if strings.HasPrefix(line, test.SubtestIndent+"    ") {
-					test.Output = append(test.Output, strings.TrimPrefix(line, test.SubtestIndent+"    "))
+		case "skip":
+			// Mark test as skipped
+			if event.Test != "" {
+				testKey := event.Package + "::" + event.Test
+				if test, exists := testMap[testKey]; exists {
+					test.Result = SKIP
+					test.Duration = time.Duration(event.Elapsed * float64(time.Second))
+					test.Time = int(test.Duration / time.Millisecond)
 				}
 			}
 		}
 	}
 
-	if len(tests) > 0 {
-		// no result line found
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	// Build final report by assembling tests into packages in order
+	for pkgName, pkg := range packageMap {
+		var totalDuration time.Duration
+
+		// Add tests in the order they were encountered
+		for _, testKey := range testOrder[pkgName] {
+			if test, exists := testMap[testKey]; exists {
+				pkg.Tests = append(pkg.Tests, test)
+				totalDuration += test.Duration
+			}
+		}
+
+		pkg.Duration = totalDuration
+		pkg.Time = int(totalDuration / time.Millisecond)
+
+		// Only add package if it has tests
+		if len(pkg.Tests) > 0 {
+			report.Packages = append(report.Packages, *pkg)
+		}
+	}
+
+	// If no packages were found and pkgName is provided, create an empty package
+	if len(report.Packages) == 0 && pkgName != "" {
 		report.Packages = append(report.Packages, Package{
-			Name:        pkgName,
-			Duration:    testsTime,
-			Time:        int(testsTime / time.Millisecond),
-			Tests:       tests,
-			Benchmarks:  benchmarks,
-			CoveragePct: coveragePct,
+			Name:  pkgName,
+			Tests: make([]*Test, 0),
 		})
 	}
 
 	return nil
-}
-
-func parseSeconds(t string) time.Duration {
-	if t == "" {
-		return time.Duration(0)
-	}
-	// ignore error
-	d, _ := time.ParseDuration(t + "s")
-	return d
-}
-
-func parseNanoseconds(t string) time.Duration {
-	// note: if input < 1 ns precision, result will be 0s.
-	if t == "" {
-		return time.Duration(0)
-	}
-	// ignore error
-	d, _ := time.ParseDuration(t + "ns")
-	return d
-}
-
-func findTest(tests []*Test, name string) *Test {
-	for i := len(tests) - 1; i >= 0; i-- {
-		if tests[i].Name == name {
-			return tests[i]
-		}
-	}
-	return nil
-}
-
-func containsFailures(tests []*Test) bool {
-	for _, test := range tests {
-		if test.Result == FAIL {
-			return true
-		}
-	}
-	return false
 }
 
 // Failures counts the number of failed tests in this report

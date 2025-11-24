@@ -1,3 +1,6 @@
 .idea
 output
 junit2html
+*.json
+*.xml
+*.log
