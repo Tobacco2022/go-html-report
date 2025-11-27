@@ -128,7 +128,7 @@
             return getObj(arrs);
         }
 
-        // 统计数据
+        // Statistics
         document.addEventListener('DOMContentLoaded', function() {
             const items = document.querySelectorAll('.test-item');
             let total = items.length;
@@ -141,7 +141,7 @@
             document.getElementById('failCount').textContent = failed;
             document.getElementById('skipCount').textContent = skipped;
 
-            // 树形排序和层级缩进
+            // Tree sorting and hierarchy indentation
             var tcs = [];
             items.forEach(function(item) {
                 var testName = item.querySelector('.test-name').textContent;
@@ -344,24 +344,53 @@
                 });
             });
 
-            // 展开/收起详情（错误输出）
+            // Open fullscreen modal when toggle-detail is clicked
+            const modal = document.getElementById('logModal');
+            const modalBody = modal.querySelector('.log-modal-body');
+            const closeBtn = modal.querySelector('.log-modal-close');
+            
             document.querySelectorAll('.toggle-detail').forEach(btn => {
                 btn.addEventListener('click', function(e) {
                     e.stopPropagation();
                     const output = this.closest('.test-item').querySelector('.test-output');
                     if (output) {
-                        const isVisible = output.style.display === 'block';
-                        output.style.display = isVisible ? 'none' : 'block';
-                        this.textContent = isVisible ? '▼' : '▲';
+                        modalBody.textContent = output.textContent;
+                        modal.style.display = 'flex';
                     }
                 });
             });
-
-            // 默认隐藏所有输出
-            document.querySelectorAll('.test-output').forEach(output => {
-                output.style.display = 'none';
+            
+            // Close modal events
+            closeBtn.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+            
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+            
+            // ESC key to close
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.style.display === 'flex') {
+                    modal.style.display = 'none';
+                }
             });
         });
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.16/jstree.min.js"></script>
+    
+    <!-- Fullscreen Modal for Log Output -->
+    <div id="logModal" class="log-modal">
+        <div class="log-modal-content">
+            <div class="log-modal-header">
+                <span class="log-modal-title">Test Output</span>
+                <button class="log-modal-close">&times;</button>
+            </div>
+            <pre class="log-modal-body"></pre>
+        </div>
+    </div>
 </body>
 </html>

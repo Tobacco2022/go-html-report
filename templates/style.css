@@ -120,6 +120,61 @@ header h1 {
     border-color: #667eea;
 }
 
+.view-toggle-btn {
+    padding: 10px 20px;
+    border: 2px solid #667eea;
+    background: #667eea;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    font-weight: 500;
+    margin-left: auto;
+}
+
+.view-toggle-btn:hover {
+    background: #5568d3;
+    border-color: #5568d3;
+}
+
+.view-icon {
+    font-size: 16px;
+}
+
+#treeViewContainer {
+    padding: 40px;
+    background: white;
+}
+
+#testTree {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    min-height: 400px;
+}
+
+.jstree-outcome-success > a {
+    color: #10b981 !important;
+    font-weight: 500;
+}
+
+.jstree-outcome-failed > a {
+    color: #ef4444 !important;
+    font-weight: 500;
+}
+
+.jstree-outcome-skipped > a {
+    color: #6b7280 !important;
+    font-weight: 500;
+}
+
+.jstree-folder > a {
+    color: #1f2937 !important;
+    font-weight: 600;
+}
+
+
 .test-suite {
     padding: 40px;
 }
@@ -323,3 +378,85 @@ header h1 {
 .ak-right   {float:right}
 .ak-clear   {clear:both;}
 .ak-bchart  {min-width:450px;height:250px;margin-bottom:10px;}
+
+/* Fullscreen Log Modal */
+.log-modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    align-items: center;
+    justify-content: center;
+}
+
+.log-modal-content {
+    background-color: #1e1e1e;
+    width: 95%;
+    height: 95%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.log-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background-color: #2d2d2d;
+    border-bottom: 2px solid #667eea;
+    border-radius: 8px 8px 0 0;
+}
+
+.log-modal-title {
+    color: #d4d4d4;
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.log-modal-close {
+    background: none;
+    border: none;
+    color: #d4d4d4;
+    font-size: 2em;
+    cursor: pointer;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+.log-modal-close:hover {
+    color: #ef4444;
+}
+
+.log-modal-body {
+    flex: 1;
+    padding: 20px;
+    margin: 0;
+    overflow: auto;
+    color: #d4d4d4;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background-color: #1e1e1e;
+}
+
+.test-output {
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.test-output:hover {
+    opacity: 0.8;
+}
