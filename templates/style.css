@@ -288,6 +288,7 @@ header h1 {
     line-height: 1.6;
     white-space: pre-wrap;
     word-wrap: break-word;
+    display: none;
 }
 
 @media (max-width: 768px) {
